@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XBattle - Galcon Fusion</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+        }
+        #status {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 100;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div>XBattle - Galcon Fusion</div>
+        <div style="color:#00ffff;font-size:13px;">You are Cyan — drag from your planets to send forces</div>
+    </div>
+    <div id="status">
+        <div>Drag to set a route (auto-sends when forces &ge; 10) &nbsp;|&nbsp; Click your planet to cancel its route</div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
