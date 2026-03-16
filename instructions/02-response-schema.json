@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Advisor Decision Response",
+  "description": "Single tactical decision returned by the LLM advisor",
+  "type": "object",
+  "required": ["action"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["expand", "attack", "consolidate", "cancel_route", "set_route"]
+    },
+    "from": {
+      "type": "integer",
+      "description": "Source planet ID (required for expand, attack, consolidate, set_route)"
+    },
+    "to": {
+      "type": "integer",
+      "description": "Target planet ID (required for expand, attack, consolidate, set_route)"
+    },
+    "planet": {
+      "type": "integer",
+      "description": "Planet ID (required for cancel_route)"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": { "action": { "const": "expand" } },
+      "required": ["action", "from", "to"]
+    },
+    {
+      "properties": { "action": { "const": "attack" } },
+      "required": ["action", "from", "to"]
+    },
+    {
+      "properties": { "action": { "const": "consolidate" } },
+      "required": ["action", "from", "to"]
+    },
+    {
+      "properties": { "action": { "const": "set_route" } },
+      "required": ["action", "from", "to"]
+    },
+    {
+      "properties": { "action": { "const": "cancel_route" } },
+      "required": ["action", "planet"]
+    }
+  ],
+  "examples": [
+    { "action": "cancel_route", "planet": 3 },
+    { "action": "attack", "from": 3, "to": 6 },
+    { "action": "expand", "from": 2, "to": 9 },
+    { "action": "consolidate", "from": 5, "to": 1 },
+    { "action": "set_route", "from": 1, "to": 7 }
+  ]
+}

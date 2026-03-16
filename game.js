@@ -19,8 +19,20 @@ class XBattleGame {
         this.gameStartTime = Date.now();
         this.aiEnabled = true;
         this.aiLastMove = [0, 0, 0, 0];
-        this.AI_MOVE_INTERVAL = 3500;
+        this.AI_MOVE_INTERVAL = 4000;
         this.MAX_FORCE_RANGE  = 400;
+
+        // --- Planet capacity tuning ---
+        // capacity: production stops when forces reach this (food runs out)
+        //   = radius × CAPACITY_PER_RADIUS
+        // maxForces: forces above this decay over time (can temporarily exceed via reinforcement)
+        //   = radius × MAX_FORCES_PER_RADIUS
+        // decayRate: forces lost per second when above maxForces
+        //   = excess × DECAY_RATE_FRACTION (so larger excess decays faster)
+        this.CAPACITY_PER_RADIUS   = 3;    // e.g. radius 24 → capacity 72
+        this.MAX_FORCES_PER_RADIUS = 5;    // e.g. radius 24 → maxForces 120
+        this.DECAY_RATE_FRACTION   = 0.15; // 15% of excess per second
+        this.DECAY_INTERVAL        = 500;  // check decay every 500ms
 
         this.routes = new Map();      // planet -> targetPlanet
         this.ROUTE_THRESHOLD = 10;
@@ -29,6 +41,7 @@ class XBattleGame {
         this.dragStart = null;
         this.dragCurrent = null;
         this.selectedPlanet = null;
+        this.bgTime = 0;
 
         this.setupEventListeners();
         this.initGame();
@@ -74,6 +87,29 @@ class XBattleGame {
                 this.restartGame();
             }
         });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (this.gameState === 'playing') {
+                    this.gameState = 'paused';
+                    this.pausedAt = Date.now();
+                } else if (this.gameState === 'paused') {
+                    // Adjust all timestamps so the pause gap is invisible
+                    const pauseDuration = Date.now() - this.pausedAt;
+                    this.gameStartTime += pauseDuration;
+                    for (const p of this.planets) {
+                        p.lastProduction += pauseDuration;
+                        p.lastDecay += pauseDuration;
+                    }
+                    for (let i = 0; i < this.aiLastMove.length; i++) this.aiLastMove[i] += pauseDuration;
+                    for (const [p] of this.routes) {
+                        if (p.lastAutoSend) p.lastAutoSend += pauseDuration;
+                    }
+                    this.gameState = 'playing';
+                }
+            }
+        });
     }
 
     initGame() {
@@ -117,7 +153,10 @@ class XBattleGame {
             owner: null,
             forces: Math.floor(firstSize / 2),
             productionRate: Math.max(1, Math.floor(firstSize / 10)),
-            lastProduction: Date.now()
+            capacity: Math.floor(firstSize * this.CAPACITY_PER_RADIUS),
+            maxForces: Math.floor(firstSize * this.MAX_FORCES_PER_RADIUS),
+            lastProduction: Date.now(),
+            lastDecay: Date.now()
         });
 
         // Each subsequent planet must be within maxRange of at least one
@@ -148,7 +187,10 @@ class XBattleGame {
                 owner: null,
                 forces: Math.floor(size / 2),
                 productionRate: Math.max(1, Math.floor(size / 10)),
-                lastProduction: Date.now()
+                capacity: Math.floor(size * this.CAPACITY_PER_RADIUS),
+                maxForces: Math.floor(size * this.MAX_FORCES_PER_RADIUS),
+                lastProduction: Date.now(),
+                lastDecay: Date.now()
             });
         }
 
@@ -217,6 +259,8 @@ class XBattleGame {
                     closest.radius = j === 0 ? 24 : 20;
                     closest.productionRate = 2;
                     closest.forces = j === 0 ? 50 : 10;
+                    closest.capacity = Math.floor(closest.radius * this.CAPACITY_PER_RADIUS);
+                    closest.maxForces = Math.floor(closest.radius * this.MAX_FORCES_PER_RADIUS);
                 }
             }
         }
@@ -226,6 +270,7 @@ class XBattleGame {
     gameLoop(timestamp = 0) {
         const dt = Math.min(timestamp - (this.lastTimestamp || timestamp), 50); // cap at 50ms
         this.lastTimestamp = timestamp;
+        this.bgTime += dt;
         this.update(dt);
         this.render();
         requestAnimationFrame((ts) => this.gameLoop(ts));
@@ -237,9 +282,19 @@ class XBattleGame {
         const now = Date.now();
 
         for (let planet of this.planets) {
-            if (planet.owner !== null && now - planet.lastProduction > 1000) {
-                planet.forces += planet.productionRate;
-                planet.lastProduction = now;
+            if (planet.owner !== null) {
+                // Production: only if below food capacity
+                if (planet.forces < planet.capacity && now - planet.lastProduction > 1150) {
+                    planet.forces = Math.min(planet.forces + planet.productionRate, planet.capacity);
+                    planet.lastProduction = now;
+                }
+                // Decay: forces above maxForces dwindle over time
+                if (planet.forces > planet.maxForces && now - planet.lastDecay >= this.DECAY_INTERVAL) {
+                    const excess = planet.forces - planet.maxForces;
+                    const decay = Math.max(1, Math.floor(excess * this.DECAY_RATE_FRACTION));
+                    planet.forces -= decay;
+                    planet.lastDecay = now;
+                }
             }
         }
 
@@ -269,13 +324,84 @@ class XBattleGame {
     }
 
     createStarField() {
-        this.stars = [];
-        for (let i = 0; i < 200; i++) {
-            this.stars.push({
-                x: Math.random() * this.canvas.width,
-                y: Math.random() * this.canvas.height,
-                size: Math.random() * 2 + 0.5,
-                opacity: Math.random() * 0.8 + 0.2
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const diag = Math.sqrt(w * w + h * h);
+        // Overshoot radius so rotation never reveals edges
+        const r = diag * 0.55;
+
+        // Deep background stars — tiny, dim, barely move
+        this.deepStars = [];
+        for (let i = 0; i < 300; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * r;
+            this.deepStars.push({
+                ox: Math.cos(angle) * dist,
+                oy: Math.sin(angle) * dist,
+                size: Math.random() * 1.2 + 0.3,
+                opacity: Math.random() * 0.35 + 0.08
+            });
+        }
+
+        // Distant galaxy clouds — faint elongated smudges (Magellanic-type)
+        this.galaxyClouds = [];
+        const cloudCount = 2 + Math.floor(Math.random() * 3); // 2–4 clouds
+        for (let i = 0; i < cloudCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = r * 0.3 + Math.random() * r * 0.5;
+            // Each cloud is a cluster of overlapping blobs
+            const blobCount = 5 + Math.floor(Math.random() * 6);
+            const tilt = Math.random() * Math.PI; // elongation axis
+            const spread = 60 + Math.random() * 100;
+            const baseHue = [210, 240, 270, 30, 190][Math.floor(Math.random() * 5)];
+            const blobs = [];
+            for (let b = 0; b < blobCount; b++) {
+                const along = (b / (blobCount - 1) - 0.5) * spread;
+                const perp = (Math.random() - 0.5) * spread * 0.35;
+                blobs.push({
+                    dx: Math.cos(tilt) * along - Math.sin(tilt) * perp,
+                    dy: Math.sin(tilt) * along + Math.cos(tilt) * perp,
+                    radius: 20 + Math.random() * 45,
+                    opacity: 0.015 + Math.random() * 0.025,
+                    hue: baseHue + (Math.random() - 0.5) * 20,
+                    lightness: 35 + Math.random() * 20
+                });
+            }
+            this.galaxyClouds.push({
+                ox: Math.cos(angle) * dist,
+                oy: Math.sin(angle) * dist,
+                blobs
+            });
+        }
+
+        // Mid-layer dust patches — soft blobs, drift slowly
+        this.dustPatches = [];
+        for (let i = 0; i < 18; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * r;
+            this.dustPatches.push({
+                ox: Math.cos(angle) * dist,
+                oy: Math.sin(angle) * dist,
+                radius: 40 + Math.random() * 120,
+                hue: Math.random() < 0.5
+                    ? 200 + Math.random() * 40     // blue-cyan
+                    : 270 + Math.random() * 30,     // purple
+                opacity: 0.02 + Math.random() * 0.04
+            });
+        }
+
+        // Close star field — brighter, drift noticeably faster
+        this.closeStars = [];
+        for (let i = 0; i < 120; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * r;
+            this.closeStars.push({
+                ox: Math.cos(angle) * dist,
+                oy: Math.sin(angle) * dist,
+                size: Math.random() * 2.5 + 0.8,
+                opacity: Math.random() * 0.7 + 0.3,
+                twinkleSpeed: 0.5 + Math.random() * 2,
+                twinklePhase: Math.random() * Math.PI * 2
             });
         }
     }
@@ -286,13 +412,75 @@ class XBattleGame {
     }
 
     renderStars() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+        const t = this.bgTime / 1000; // seconds
+
+        // Rotation speeds (radians/sec) — centre rotates slowest
+        const DEEP_ROT   = 0.0008;
+        const DUST_ROT   = 0.002;
+        const CLOSE_ROT  = 0.004;
+
         this.ctx.save();
-        for (let star of this.stars) {
-            this.ctx.fillStyle = `rgba(255,255,255,${star.opacity})`;
+
+        // --- Deep background stars ---
+        const da = t * DEEP_ROT;
+        const cosD = Math.cos(da), sinD = Math.sin(da);
+        for (const s of this.deepStars) {
+            const x = cx + s.ox * cosD - s.oy * sinD;
+            const y = cy + s.ox * sinD + s.oy * cosD;
+            this.ctx.fillStyle = `rgba(255,255,255,${s.opacity})`;
             this.ctx.beginPath();
-            this.ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+            this.ctx.arc(x, y, s.size, 0, Math.PI * 2);
             this.ctx.fill();
         }
+
+        // --- Distant galaxy clouds (Magellanic-type) ---
+        for (const cloud of this.galaxyClouds) {
+            const gx = cx + cloud.ox * cosD - cloud.oy * sinD;
+            const gy = cy + cloud.ox * sinD + cloud.oy * cosD;
+            for (const b of cloud.blobs) {
+                const bx = gx + b.dx;
+                const by = gy + b.dy;
+                const grad = this.ctx.createRadialGradient(bx, by, 0, bx, by, b.radius);
+                grad.addColorStop(0, `hsla(${b.hue},50%,${b.lightness}%,${b.opacity})`);
+                grad.addColorStop(0.6, `hsla(${b.hue},40%,${b.lightness * 0.6}%,${b.opacity * 0.4})`);
+                grad.addColorStop(1, `hsla(${b.hue},30%,20%,0)`);
+                this.ctx.fillStyle = grad;
+                this.ctx.beginPath();
+                this.ctx.arc(bx, by, b.radius, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+        }
+
+        // --- Mid-layer dust / nebula patches ---
+        const ma = t * DUST_ROT;
+        const cosM = Math.cos(ma), sinM = Math.sin(ma);
+        for (const d of this.dustPatches) {
+            const x = cx + d.ox * cosM - d.oy * sinM;
+            const y = cy + d.ox * sinM + d.oy * cosM;
+            const grad = this.ctx.createRadialGradient(x, y, 0, x, y, d.radius);
+            grad.addColorStop(0, `hsla(${d.hue},60%,40%,${d.opacity})`);
+            grad.addColorStop(1, `hsla(${d.hue},60%,20%,0)`);
+            this.ctx.fillStyle = grad;
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, d.radius, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
+        // --- Close star field ---
+        const ca = t * CLOSE_ROT;
+        const cosC = Math.cos(ca), sinC = Math.sin(ca);
+        for (const s of this.closeStars) {
+            const x = cx + s.ox * cosC - s.oy * sinC;
+            const y = cy + s.ox * sinC + s.oy * cosC;
+            const twinkle = 0.6 + 0.4 * Math.sin(t * s.twinkleSpeed + s.twinklePhase);
+            this.ctx.fillStyle = `rgba(255,255,255,${s.opacity * twinkle})`;
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, s.size, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
         this.ctx.restore();
     }
 
@@ -418,7 +606,34 @@ class XBattleGame {
             this.ctx.fill();
             this.ctx.stroke();
 
+            // Capacity arc — shows food level as a ring around the planet
             this.ctx.shadowBlur = 0;
+            if (planet.owner !== null) {
+                const fillRatio = Math.min(planet.forces / planet.capacity, 1);
+                const arcRadius = planet.radius + 4;
+                const startAngle = -Math.PI / 2;
+                const endAngle = startAngle + fillRatio * Math.PI * 2;
+
+                // Background ring (dim)
+                this.ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(planet.x, planet.y, arcRadius, 0, Math.PI * 2);
+                this.ctx.stroke();
+
+                // Fill ring — green when under capacity, yellow near cap, red if decaying
+                let arcColor;
+                if (planet.forces > planet.maxForces) arcColor = '#ff4444';
+                else if (planet.forces >= planet.capacity * 0.85) arcColor = '#ffaa00';
+                else arcColor = '#44ff44';
+
+                this.ctx.strokeStyle = arcColor;
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(planet.x, planet.y, arcRadius, startAngle, endAngle);
+                this.ctx.stroke();
+            }
+
             this.ctx.fillStyle = '#fff';
             this.ctx.font = 'bold 14px Arial';
             this.ctx.textAlign = 'center';
@@ -464,6 +679,26 @@ class XBattleGame {
     }
 
     renderGameState() {
+        if (this.gameState === 'paused') {
+            const cx = this.canvas.width / 2;
+            const cy = this.canvas.height / 2;
+            this.ctx.save();
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.font = 'bold 48px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.shadowColor = '#00ffff';
+            this.ctx.shadowBlur = 15;
+            this.ctx.fillText('PAUSED', cx, cy - 10);
+            this.ctx.shadowBlur = 0;
+            this.ctx.font = '18px Arial';
+            this.ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            this.ctx.fillText('Press Space to resume', cx, cy + 30);
+            this.ctx.restore();
+            return;
+        }
+
         if (this.gameState !== 'won' && this.gameState !== 'lost') return;
 
         const cx = this.canvas.width / 2;
@@ -645,7 +880,7 @@ class XBattleGame {
                 continue;
             }
             if (planet.forces >= this.ROUTE_THRESHOLD &&
-                (!planet.lastAutoSend || now - planet.lastAutoSend >= 1000)) {
+                (!planet.lastAutoSend || now - planet.lastAutoSend >= 1150)) {
                 this.sendForces(planet, target);
                 planet.lastAutoSend = now;
             }
@@ -655,13 +890,24 @@ class XBattleGame {
     handleForceArrival(force) {
         const target = force.target;
         if (target.owner === force.owner) {
-            target.forces += force.amount;
-        } else {
-            target.forces -= force.amount;
-            if (target.forces < 0) {
-                target.owner = force.owner;
-                target.forces = Math.abs(target.forces);
-            }
+            // Forces only move one way — friendly arrivals are absorbed (lost)
+            return;
+        }
+        // Lanchester-style combat: the larger force has an advantage.
+        const atk = force.amount;
+        const def = target.forces;
+        if (def <= 0) {
+            target.owner = force.owner;
+            target.forces = atk;
+            return;
+        }
+        const ratio = atk / def;
+        const bonus = ratio > 1 ? Math.sqrt(ratio) : 1;
+        const effectiveAtk = Math.floor(atk * bonus);
+        target.forces -= effectiveAtk;
+        if (target.forces < 0) {
+            target.owner = force.owner;
+            target.forces = Math.floor(Math.abs(target.forces) / bonus);
         }
     }
 
@@ -697,14 +943,17 @@ class XBattleGame {
         }
     }
 
-    // Dynamic interval: AI behind → shorter (panic), AI ahead → longer (complacent)
+    // Dynamic interval: AI behind → shorter (panic), AI ahead → slightly shorter too (press advantage)
     getAIInterval(playerId) {
         const playerPlanets = this.planets.filter(p => p.owner === 0).length;
         const aiPlanets     = this.planets.filter(p => p.owner === playerId).length;
         const ratio = aiPlanets / Math.max(playerPlanets, 1);
-        // ratio > 1 → AI winning → scale > 1 → longer interval (relaxed)
-        // ratio < 1 → AI losing → scale < 1 → shorter interval (panic)
-        const scale = Math.max(0.4, Math.min(1.4, ratio));
+        // Behind (ratio < 1) → panic, down to 0.4×
+        // Even (ratio ≈ 1) → normal
+        // Ahead (ratio > 1) → only mildly relaxed, cap at 1.1× (press the advantage)
+        const scale = ratio < 1
+            ? Math.max(0.4, ratio)
+            : Math.min(1.1, 0.9 + ratio * 0.1);
         return this.AI_MOVE_INTERVAL * scale;
     }
 
@@ -719,13 +968,13 @@ class XBattleGame {
         }
     }
 
-    // Top 2 surplus planets per tick — focused attacks, not overwhelming swarm
+    // Scale active planets with territory size — more planets = more active fronts
     makeAIMove(playerId) {
         const aiPlanets = this.planets
             .filter(p => p.owner === playerId && p.forces > 10)
-            .sort((a, b) => b.forces - a.forces)
-            .slice(0, 2);
-        for (const source of aiPlanets) {
+            .sort((a, b) => b.forces - a.forces);
+        const maxActive = Math.max(2, Math.ceil(aiPlanets.length * 0.4));
+        for (const source of aiPlanets.slice(0, maxActive)) {
             const target = this.selectBestTargetPlanet(source, playerId);
             if (target) this.sendForces(source, target);
         }
@@ -751,18 +1000,24 @@ class XBattleGame {
             let score = 0;
 
             if (planet.owner === playerId) {
-                // Reinforce own planets — low priority
-                score = planet.productionRate * 2 - distance * 0.01;
+                // Cannot send to own planets — skip
+                continue;
             } else if (planet.owner === null) {
                 // Expand into neutrals — medium priority
                 score = planet.productionRate * 3 - distance * 0.01;
-            } else if (sourcePlanet.forces >= planet.forces * 1.5) {
+            } else if (sourcePlanet.forces >= planet.forces * 1.2) {
+                // Attack with modest advantage (was 1.5× — too conservative)
                 const adv = sourcePlanet.forces - planet.forces;
                 score = planet.productionRate * 4 - distance * 0.01 + adv * 0.1;
                 // Territorial bias: strongly prefer attacking nearest rival over others
                 if (planet.owner === nearestRival) {
                     score *= 1.5;
                 }
+            }
+
+            // Pressure: if source is near capacity, lower the bar — must spend forces
+            if (sourcePlanet.forces >= sourcePlanet.capacity * 0.8 && planet.owner !== playerId) {
+                score += 3;
             }
 
             if (score > bestScore) { bestScore = score; bestTarget = planet; }
@@ -804,7 +1059,7 @@ class ForceStream {
 
         const dist = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
         // 100px/sec expressed as fraction-of-journey per second
-        this.speed = 100 / Math.max(dist, 1);
+        this.speed = 85 / Math.max(dist, 1);
     }
 
     // dt is milliseconds from the game loop

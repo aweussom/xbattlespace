@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Advisor Game State Snapshot",
+  "description": "Compact game state sent to the LLM strategic advisor every ~180 ticks",
+  "type": "object",
+  "required": ["tick", "myPlanets", "incomingThreats", "neutralsInRange", "enemyPlanetsInRange", "maxForceRange"],
+  "properties": {
+    "tick": {
+      "type": "integer",
+      "description": "Current simulation tick"
+    },
+    "myPlanets": {
+      "type": "array",
+      "description": "All planets owned by player 0",
+      "items": {
+        "type": "object",
+        "required": ["id", "forces", "production", "hasRoute", "routeTarget", "routeDrainPerSec"],
+        "properties": {
+          "id": { "type": "integer" },
+          "forces": { "type": "integer" },
+          "production": { "type": "integer", "description": "Forces produced per second" },
+          "hasRoute": { "type": "boolean" },
+          "routeTarget": { "type": ["integer", "null"], "description": "Planet ID the route sends to, or null" },
+          "routeDrainPerSec": { "type": "integer", "description": "Forces drained per auto-send interval (0 if no route)" }
+        }
+      }
+    },
+    "incomingThreats": {
+      "type": "array",
+      "description": "Enemy forces currently in-flight toward our planets",
+      "items": {
+        "type": "object",
+        "required": ["targetId", "amount", "owner", "etaTicks"],
+        "properties": {
+          "targetId": { "type": "integer", "description": "Which of our planets is targeted" },
+          "amount": { "type": "integer", "description": "Number of enemy forces incoming" },
+          "owner": { "type": "integer", "description": "Enemy player ID (1-3)" },
+          "etaTicks": { "type": "integer", "description": "Ticks until arrival" }
+        }
+      }
+    },
+    "neutralsInRange": {
+      "type": "array",
+      "description": "Neutral planets within MAX_FORCE_RANGE of any owned planet",
+      "items": {
+        "type": "object",
+        "required": ["id", "forces", "production", "nearestMyPlanetId", "distance"],
+        "properties": {
+          "id": { "type": "integer" },
+          "forces": { "type": "integer" },
+          "production": { "type": "integer" },
+          "nearestMyPlanetId": { "type": "integer", "description": "Which of our planets is closest" },
+          "distance": { "type": "number", "description": "Pixel distance from nearest owned planet" }
+        }
+      }
+    },
+    "enemyPlanetsInRange": {
+      "type": "array",
+      "description": "Enemy-owned planets within MAX_FORCE_RANGE of any owned planet",
+      "items": {
+        "type": "object",
+        "required": ["id", "owner", "forces", "production", "nearestMyPlanetId", "distance"],
+        "properties": {
+          "id": { "type": "integer" },
+          "owner": { "type": "integer" },
+          "forces": { "type": "integer" },
+          "production": { "type": "integer" },
+          "nearestMyPlanetId": { "type": "integer" },
+          "distance": { "type": "number" }
+        }
+      }
+    },
+    "maxForceRange": {
+      "type": "integer",
+      "description": "Maximum distance forces can travel"
+    }
+  },
+  "example": {
+    "tick": 360,
+    "myPlanets": [
+      { "id": 3, "forces": 12, "production": 2, "hasRoute": true, "routeTarget": 7, "routeDrainPerSec": 6 },
+      { "id": 1, "forces": 60, "production": 3, "hasRoute": false, "routeTarget": null, "routeDrainPerSec": 0 }
+    ],
+    "incomingThreats": [
+      { "targetId": 3, "amount": 18, "owner": 1, "etaTicks": 40 }
+    ],
+    "neutralsInRange": [
+      { "id": 9, "forces": 6, "production": 1, "nearestMyPlanetId": 1, "distance": 210 }
+    ],
+    "enemyPlanetsInRange": [
+      { "id": 6, "owner": 2, "forces": 8, "production": 2, "nearestMyPlanetId": 1, "distance": 185 }
+    ],
+    "maxForceRange": 400
+  }
+}
