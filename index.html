@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
-    <title>XBattle - Galcon Fusion</title>
+    <title>XBattleSpace - Clonecon Fusion</title>
     <style>
         body {
             margin: 0;
@@ -36,8 +36,10 @@
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="ui">
-        <div>XBattle - Galcon Fusion</div>
-        <div id="hint" style="color:#00ffff;font-size:13px;">You are Cyan — drag from your planets to send forces</div>
+        <div>XBattleSpace - Clonecon Fusion</div>
+        <div id="hint" style="color:#00ffff;font-size:12px;line-height:1.5;">
+            You are <b>Cyan</b> — Drag planet→target to route &nbsp;|&nbsp; Drag empty space to box-select, then click target &nbsp;|&nbsp; <b>Shift</b>+drag to cancel routes
+        </div>
     </div>
     <div id="status">
         <div>Drag to set a route (auto-sends when forces &ge; 10) &nbsp;|&nbsp; Click your planet to cancel its route &nbsp;|&nbsp; <b>Space</b> to pause</div>

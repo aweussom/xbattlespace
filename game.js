@@ -78,6 +78,11 @@ class XBattleGame {
         this.boxMode = null;          // 'send' (left-click) or 'cancel' (shift/touch-btn)
         this.virtualShift = false;    // touch-screen shift toggle
 
+        // --- Event logging for benchmarking ---
+        this.eventLog = [];           // structured game events for analysis
+        this.snapshotInterval = 5000; // take state snapshot every 5 seconds
+        this.lastSnapshot = 0;
+
         this.setupEventListeners();
         this.createStarField();
         this.gameLoop();
@@ -175,8 +180,11 @@ class XBattleGame {
         this.gameStartTime = Date.now();
         this.aiLastMove = [0, 0, 0, 0];
         this.gameState = 'playing';
+        this.eventLog = [];
+        this.lastSnapshot = 0;
         this.initGame();
         this.createStarField();
+        this.logEvent('game_start', { difficulty: this.difficulty, players: this.players.length, planets: this.planets.length });
         const hint = document.getElementById('hint');
         if (hint) hint.style.display = '';
     }
@@ -355,7 +363,6 @@ class XBattleGame {
      * then calls update() and render().
      * @param {number} timestamp - High-resolution timestamp from requestAnimationFrame
      */
-    // Delta time is passed from requestAnimationFrame timestamps (ms)
     gameLoop(timestamp = 0) {
         const dt = Math.min(timestamp - (this.lastTimestamp || timestamp), 50); // cap at 50ms
         this.lastTimestamp = timestamp;
@@ -434,6 +441,13 @@ class XBattleGame {
         this.processRoutes();
         this.updateAI();
         this.checkWinCondition();
+
+        // Periodic state snapshot for benchmarking
+        const elapsed = now - this.gameStartTime;
+        if (elapsed - this.lastSnapshot >= this.snapshotInterval) {
+            this.takeSnapshot();
+            this.lastSnapshot = elapsed;
+        }
     }
 
     /**
@@ -986,11 +1000,11 @@ class XBattleGame {
         this.ctx.fillStyle = '#00ffff';
         this.ctx.shadowColor = '#00ffff';
         this.ctx.shadowBlur = 20;
-        this.ctx.fillText('XBattle', cx, cy - 130);
+        this.ctx.fillText('XBattleSpace', cx, cy - 130);
         this.ctx.shadowBlur = 0;
         this.ctx.font = '20px Arial';
         this.ctx.fillStyle = '#888';
-        this.ctx.fillText('Galcon Fusion', cx, cy - 100);
+        this.ctx.fillText('Clonecon Fusion', cx, cy - 100);
 
         // Difficulty buttons
         const labels = ['1 — Easy', '2 — Medium', '3 — Hard'];
@@ -1217,11 +1231,13 @@ class XBattleGame {
             const isClick = Math.sqrt(ddx * ddx + ddy * ddy) < 8;
 
             if (isClick) {
+                this.logEvent('route_cancel', { planet: this.selectedPlanet.id });
                 this.routes.delete(this.selectedPlanet);
             } else {
                 const target = this.getSnapTarget(this.mousePos.x, this.mousePos.y, this.selectedPlanet);
                 if (target && this.isDragValid(this.selectedPlanet, target) &&
                     this.selectedPlanet.forces > 0) {
+                    this.logEvent('route_set', { from: this.selectedPlanet.id, to: target.id, targetOwner: target.owner });
                     this.routes.set(this.selectedPlanet, target);
                     this.sendForces(this.selectedPlanet, target);
                 }
@@ -1250,11 +1266,11 @@ class XBattleGame {
 
                 if (selected.length > 0) {
                     if (this.boxMode === 'cancel') {
-                        // Shift+drag: cancel all routes on selected planets
+                        this.logEvent('box_cancel', { count: selected.length, planets: selected.map(p => p.id) });
                         for (const p of selected) this.routes.delete(p);
                         this.clearBoxSelect();
                     } else {
-                        // Normal drag: select planets, wait for target click
+                        this.logEvent('box_select', { count: selected.length, planets: selected.map(p => p.id) });
                         this.selectedPlanets = selected;
                     }
                 } else {
@@ -1367,6 +1383,64 @@ class XBattleGame {
     }
 
     /**
+     * Logs a structured game event for benchmarking analysis.
+     * Events are stored in memory and can be downloaded as JSON after the game.
+     * @param {string} type - Event type (e.g. 'capture', 'send', 'route_set', 'game_end')
+     * @param {Object} data - Event-specific payload
+     */
+    logEvent(type, data = {}) {
+        this.eventLog.push({
+            t: Date.now() - this.gameStartTime,
+            type,
+            ...data
+        });
+    }
+
+    /**
+     * Takes a periodic snapshot of the full board state: per-player planet counts,
+     * total forces, active routes, and forces in flight. Called every snapshotInterval ms.
+     */
+    takeSnapshot() {
+        const snapshot = { players: [] };
+        for (let i = 0; i < this.players.length; i++) {
+            const owned = this.planets.filter(p => p.owner === i);
+            const inFlight = this.forces.filter(f => f.owner === i);
+            const routes = [...this.routes].filter(([p]) => p.owner === i).length;
+            snapshot.players.push({
+                id: i,
+                planets: owned.length,
+                totalForces: owned.reduce((s, p) => s + p.forces, 0),
+                inFlightForces: inFlight.reduce((s, f) => s + f.amount, 0),
+                activeRoutes: routes
+            });
+        }
+        snapshot.neutrals = this.planets.filter(p => p.owner === null).length;
+        this.logEvent('snapshot', snapshot);
+    }
+
+    /**
+     * Exports the full event log as a downloadable JSON file.
+     * Triggered automatically on game end (win/loss) and available via console: game.downloadLog()
+     */
+    downloadLog() {
+        const summary = {
+            difficulty: this.difficulty,
+            playerCount: this.players.length,
+            totalPlanets: this.planets.length,
+            result: this.gameState,
+            duration: Date.now() - this.gameStartTime,
+            events: this.eventLog
+        };
+        const blob = new Blob([JSON.stringify(summary, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `benchmark-${this.difficulty}-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    /**
      * Euclidean distance between two objects with x,y properties.
      * @param {{x:number,y:number}} a
      * @param {{x:number,y:number}} b
@@ -1384,7 +1458,6 @@ class XBattleGame {
      * @param {Object} target - Destination planet (any owner)
      * @returns {Object|null} First hop planet to route through, or null if unreachable
      */
-    // BFS to find a relay chain from source to target through owned planets
     findRouteChain(source, target) {
         if (this.distBetween(source, target) <= this.MAX_FORCE_RANGE) {
             return target; // direct route
@@ -1447,6 +1520,10 @@ class XBattleGame {
             this.players[fromPlanet.owner].color
         ));
         if (fromPlanet.owner === 0) {
+            this.logEvent('send', {
+                from: fromPlanet.id, to: toPlanet.id,
+                amount: forcesToSend, targetOwner: toPlanet.owner
+            });
             const hint = document.getElementById('hint');
             if (hint) hint.style.display = 'none';
         }
@@ -1511,8 +1588,10 @@ class XBattleGame {
         const def = target.forces;
         if (def <= 0) {
             this.routes.delete(target);
+            const prevOwner = target.owner;
             target.owner = force.owner;
             target.forces = atk;
+            this.logEvent('capture', { planet: target.id, by: force.owner, from: prevOwner, forces: atk });
             return;
         }
         const ratio = atk / def;
@@ -1521,8 +1600,10 @@ class XBattleGame {
         target.forces -= effectiveAtk;
         if (target.forces < 0) {
             this.routes.delete(target);
+            const prevOwner = target.owner;
             target.owner = force.owner;
             target.forces = Math.floor(Math.abs(target.forces) / (lanchesterBonus * coordMult));
+            this.logEvent('capture', { planet: target.id, by: force.owner, from: prevOwner, forces: target.forces });
         }
     }
 
@@ -1541,6 +1622,8 @@ class XBattleGame {
             this.gameState = 'lost';
             this.winner = null;
             this.finalScores = planetCount;
+            this.logEvent('game_end', { result: 'lost', scores: [...planetCount] });
+            this.downloadLog();
             return;
         }
 
@@ -1548,6 +1631,8 @@ class XBattleGame {
             this.gameState = 'won';
             this.winner = 0;
             this.finalScores = planetCount;
+            this.logEvent('game_end', { result: 'won', scores: [...planetCount] });
+            this.downloadLog();
             return;
         }
 
@@ -1556,6 +1641,8 @@ class XBattleGame {
             this.gameState = 'lost';
             this.winner = aliveIds[0];
             this.finalScores = planetCount;
+            this.logEvent('game_end', { result: 'lost', winner: aliveIds[0], scores: [...planetCount] });
+            this.downloadLog();
         }
     }
 
@@ -1565,7 +1652,6 @@ class XBattleGame {
      * @param {number} playerId - AI player index
      * @returns {number} Interval in milliseconds
      */
-    // Dynamic interval: AI behind → shorter (panic), AI ahead → slightly shorter too (press advantage)
     getAIInterval(playerId) {
         const playerPlanets = this.planets.filter(p => p.owner === 0).length;
         const aiPlanets     = this.planets.filter(p => p.owner === playerId).length;
@@ -1596,7 +1682,6 @@ class XBattleGame {
      * activates top 40% (min 2), and sets routes to best-scored targets.
      * @param {number} playerId - AI player index
      */
-    // Scale active planets with territory size — more planets = more active fronts
     makeAIMove(playerId) {
         // Clear stale AI routes (target captured by same owner, or source lost)
         for (const [planet, target] of this.routes) {
@@ -1679,7 +1764,6 @@ class XBattleGame {
      * @param {number} playerId - AI player index
      * @returns {number|null} Owner ID of nearest rival, or null
      */
-    // Find which rival has planets closest to this AI's territory
     findNearestRival(playerId) {
         const myPlanets = this.planets.filter(p => p.owner === playerId);
         if (myPlanets.length === 0) return null;
@@ -1733,7 +1817,6 @@ class ForceStream {
      * Advances progress along the path. Speed is pre-computed as fraction-of-journey per second.
      * @param {number} dt - Delta time in milliseconds
      */
-    // dt is milliseconds from the game loop
     update(dt) {
         this.progress += this.speed * dt / 1000;
     }
@@ -1787,4 +1870,4 @@ class ForceStream {
 }
 
 /** Bootstrap: instantiate the game when the page has fully loaded. */
-window.addEventListener('load', () => { new XBattleGame(); });
+window.addEventListener('load', () => { window.game = new XBattleGame(); });
