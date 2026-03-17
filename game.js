@@ -35,6 +35,21 @@ class XBattleGame {
         this.AI_MOVE_INTERVAL = 4000;
         this.MAX_FORCE_RANGE  = 320;
 
+        // Level system state
+        this.levelLoader = new LevelLoader();
+        this.gameMode = 'quickplay';  // 'quickplay' or 'campaign'
+        this.currentLevelName = null;
+        this.menuScreen = 'main';     // 'main', 'campaign-difficulty', 'level-select', 'quickplay-difficulty'
+        this.campaignDifficulty = 'easy';
+        this.aiForceThreshold = 10;
+        this.aiAttackRatio = 1.2;
+        this.aiTopPlanets = null;
+
+        // Preload level index (fire-and-forget)
+        this.levelLoader.loadIndex().catch(err => {
+            console.warn('Could not load level index — campaign mode unavailable:', err);
+        });
+
         // --- Planet capacity tuning ---
         // capacity: production stops when forces reach this (food runs out)
         //   = radius × CAPACITY_PER_RADIUS
@@ -128,17 +143,35 @@ class XBattleGame {
             if (this.gameState === 'menu') {
                 this.handleMenuClick(e);
             } else if (this.gameState === 'won' || this.gameState === 'lost') {
-                this.gameState = 'menu';
+                if (this.gameMode === 'campaign') {
+                    this.handleEndScreenClick(e);
+                } else {
+                    this.gameState = 'menu';
+                    this.menuScreen = 'main';
+                }
             }
         });
 
         window.addEventListener('keydown', (e) => {
             if (this.gameState === 'menu') {
-                if (e.key === '1' || e.key === '2' || e.key === '3') {
-                    this.difficulty = parseInt(e.key);
-                    this.startGame();
-                    return;
+                if (this.menuScreen === 'quickplay-difficulty' || this.menuScreen === 'campaign-difficulty') {
+                    if (e.key === '1' || e.key === '2' || e.key === '3') {
+                        if (this.menuScreen === 'quickplay-difficulty') {
+                            this.gameMode = 'quickplay';
+                            this.difficulty = parseInt(e.key);
+                            this.startGame();
+                        } else {
+                            this.campaignDifficulty = ['easy', 'medium', 'hard'][parseInt(e.key) - 1];
+                            this.menuScreen = 'level-select';
+                        }
+                        return;
+                    }
                 }
+                if (e.key === 'Escape') {
+                    if (this.menuScreen === 'level-select') { this.menuScreen = 'campaign-difficulty'; return; }
+                    if (this.menuScreen === 'campaign-difficulty' || this.menuScreen === 'quickplay-difficulty') { this.menuScreen = 'main'; return; }
+                }
+                return;
             }
             if (e.code === 'Space') {
                 e.preventDefault();
@@ -165,11 +198,16 @@ class XBattleGame {
         });
     }
 
-    /** Orchestrates game initialization: sets up players, generates planets, assigns starting positions. */
+    /** Orchestrates game initialization: loads level data (campaign) or generates random map (quickplay). */
     initGame() {
-        this.setupPlayers();
-        this.generatePlanets();
-        this.assignStartingPlanets();
+        if (this.gameMode === 'campaign' && this._pendingLevelData) {
+            this.loadLevel(this._pendingLevelData);
+            this._pendingLevelData = null;
+        } else {
+            this.setupPlayers();
+            this.generatePlanets();
+            this.assignStartingPlanets();
+        }
     }
 
     /** Resets all game state and transitions from menu to playing. Called when player picks difficulty. */
@@ -192,6 +230,8 @@ class XBattleGame {
     /** Returns to menu state. Called from win/loss screen. */
     restartGame() {
         this.gameState = 'menu';
+        this.menuScreen = 'main';
+        this._levelUnlocked = false;
     }
 
     /** Creates player array based on difficulty. Easy=1 AI, Medium=2, Hard=3. Human is always player 0 (cyan). */
@@ -358,6 +398,65 @@ class XBattleGame {
     }
 
     /**
+     * Loads a pre-designed level from JSON data, replacing random generation.
+     * Maps normalized coordinates to a fixed 1920×1080 reference area scaled to fit the canvas
+     * (uniform scale, centered). This keeps pixel distances identical across all screen sizes,
+     * so MAX_FORCE_RANGE (320px) behaves the same as in Quick Play.
+     * @param {Object} levelData - Parsed level JSON
+     */
+    loadLevel(levelData) {
+        // Uniform scale: fit 1920×1080 reference into canvas, centered
+        const refW = 1920, refH = 1080;
+        const scale = Math.min(this.canvas.width / refW, this.canvas.height / refH);
+        const offsetX = (this.canvas.width - refW * scale) / 2;
+        const offsetY = (this.canvas.height - refH * scale) / 2;
+
+        this.planets = levelData.planets.map(p => ({
+            ...p,
+            x: offsetX + p.x * refW * scale,
+            y: offsetY + p.y * refH * scale,
+            capacity:   Math.floor(p.radius * this.CAPACITY_PER_RADIUS),
+            maxForces:  Math.floor(p.radius * this.MAX_FORCES_PER_RADIUS),
+            lastProduction: Date.now(),
+            lastDecay:      Date.now()
+        }));
+
+        // Scale MAX_FORCE_RANGE the same way so reach is proportional to the game area
+        this.MAX_FORCE_RANGE = (levelData.maxForceRange || 320) * scale;
+
+        const ai = levelData.ai;
+        this.AI_MOVE_INTERVAL  = ai.moveInterval;
+        this.aiAttackRatio     = ai.attackRatio;
+        this.aiForceThreshold  = ai.forceThreshold;
+        this.aiTopPlanets      = ai.topPlanetsPerTick;
+
+        this.players = levelData.players.map(p => ({ ...p }));
+        this.aiLastMove = [0, 0, 0, 0];
+
+        this.currentLevelName = levelData.name;
+    }
+
+    /**
+     * Loads and starts a campaign level. Fetches level JSON, sets campaign mode, then starts game.
+     * @param {number} levelId - Level number (1-10)
+     * @param {string} difficulty - 'easy', 'medium', or 'hard'
+     */
+    async startCampaignLevel(levelId, difficulty) {
+        try {
+            const data = await this.levelLoader.loadLevel(levelId, difficulty);
+            this.gameMode = 'campaign';
+            this._pendingLevelData = data;
+            this.difficulty = ['easy', 'medium', 'hard'].indexOf(difficulty) + 1;
+            this.startGame();
+        } catch (err) {
+            console.error('Failed to load level:', err);
+            this.gameMode = 'quickplay';
+            this.gameState = 'menu';
+            this.menuScreen = 'main';
+        }
+    }
+
+    /**
      * Main animation loop via requestAnimationFrame. Computes delta time (capped at 50ms
      * to prevent physics explosion on tab-switch), updates background animation timer,
      * then calls update() and render().
@@ -466,6 +565,7 @@ class XBattleGame {
         this.renderBoxSelect();
         this.renderVirtualShiftBtn();
         this.renderScoreboard();
+        this.renderCampaignHUD();
         this.renderGameState();
     }
 
@@ -642,6 +742,19 @@ class XBattleGame {
     }
 
     /** Draws top-right scoreboard: all players ranked by planet count with force totals and eliminated status. */
+    /** Shows level name during campaign gameplay. */
+    renderCampaignHUD() {
+        if (this.gameMode !== 'campaign' || this.gameState !== 'playing') return;
+        const levelId = this.levelLoader.currentLevelId;
+        const name = this.currentLevelName || '';
+        this.ctx.save();
+        this.ctx.font = '14px Arial';
+        this.ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText(`Level ${levelId}: ${name}`, 10, this.canvas.height - 40);
+        this.ctx.restore();
+    }
+
     renderScoreboard() {
         const pad = 12, lineH = 22;
         const boxW = 180;
@@ -985,34 +1098,115 @@ class XBattleGame {
         this.ctx.restore();
     }
 
-    /** Draws difficulty selection screen with title, 3 clickable buttons, and keyboard hint. */
-    renderMenu() {
+    /** Draws the menu title header (shared across menu screens). */
+    renderMenuTitle() {
         const cx = this.canvas.width / 2;
         const cy = this.canvas.height / 2;
-
-        this.ctx.save();
-        this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Title
         this.ctx.font = 'bold 52px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.fillStyle = '#00ffff';
         this.ctx.shadowColor = '#00ffff';
         this.ctx.shadowBlur = 20;
-        this.ctx.fillText('XBattleSpace', cx, cy - 130);
+        this.ctx.fillText('XBattleSpace', cx, cy - 160);
         this.ctx.shadowBlur = 0;
         this.ctx.font = '20px Arial';
         this.ctx.fillStyle = '#888';
-        this.ctx.fillText('Clonecon Fusion', cx, cy - 100);
+        this.ctx.fillText('Clonecon Fusion', cx, cy - 130);
+    }
 
-        // Difficulty buttons
-        const labels = ['1 — Easy', '2 — Medium', '3 — Hard'];
-        const descs = ['3 starting planets', '2 starting planets', '1 starting planet'];
-        const btnW = 220, btnH = 50, gap = 16;
-        const startY = cy - 20;
+    /** Draws a back button in top-left. Returns the button rect for click detection. */
+    renderBackButton() {
+        const bx = 20, by = 20, bw = 80, bh = 36;
+        this.ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        this.ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.roundRect(bx, by, bw, bh, 6);
+        this.ctx.fill();
+        this.ctx.stroke();
+        this.ctx.font = '14px Arial';
+        this.ctx.fillStyle = '#aaa';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('\u2190 Back', bx + bw / 2, by + 23);
+        return { x: bx, y: by, w: bw, h: bh };
+    }
+
+    /** Dispatches to the correct menu sub-screen based on this.menuScreen. */
+    renderMenu() {
+        this.ctx.save();
+        this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.renderMenuTitle();
 
         this._menuButtons = [];
+        this._backButton = null;
+
+        if (this.menuScreen === 'main') {
+            this.renderMainMenu();
+        } else if (this.menuScreen === 'quickplay-difficulty') {
+            this.renderQuickPlayMenu();
+        } else if (this.menuScreen === 'campaign-difficulty') {
+            this.renderCampaignDifficultyMenu();
+        } else if (this.menuScreen === 'level-select') {
+            this.renderLevelSelectMenu();
+        }
+
+        this.ctx.restore();
+    }
+
+    /** Main menu: Campaign + Quick Play buttons. */
+    renderMainMenu() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+        const btnW = 260, btnH = 56, gap = 20;
+        const startY = cy - 50;
+
+        const campaignAvailable = this.levelLoader.index !== null;
+        const buttons = [
+            { label: 'Campaign', desc: campaignAvailable ? '10 hand-crafted levels' : 'Requires HTTP server', action: 'campaign', enabled: campaignAvailable },
+            { label: 'Quick Play', desc: 'Random map, pick difficulty', action: 'quickplay', enabled: true }
+        ];
+
+        buttons.forEach((btn, i) => {
+            const bx = cx - btnW / 2;
+            const by = startY + i * (btnH + gap);
+
+            this.ctx.fillStyle = btn.enabled ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)';
+            this.ctx.strokeStyle = btn.enabled ? 'rgba(0,255,255,0.3)' : 'rgba(255,255,255,0.1)';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.roundRect(bx, by, btnW, btnH, 8);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            this.ctx.font = 'bold 20px Arial';
+            this.ctx.fillStyle = btn.enabled ? '#ccc' : '#555';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(btn.label, cx, by + 24);
+            this.ctx.font = '12px Arial';
+            this.ctx.fillStyle = btn.enabled ? '#777' : '#444';
+            this.ctx.fillText(btn.desc, cx, by + 44);
+
+            this._menuButtons.push({ x: bx, y: by, w: btnW, h: btnH, action: btn.action, enabled: btn.enabled });
+        });
+    }
+
+    /** Quick Play difficulty select (original menu behavior). */
+    renderQuickPlayMenu() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+        this._backButton = this.renderBackButton();
+
+        this.ctx.font = '18px Arial';
+        this.ctx.fillStyle = '#aaa';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Quick Play — Select Difficulty', cx, cy - 90);
+
+        const labels = ['1 — Easy', '2 — Medium', '3 — Hard'];
+        const descs = ['3 starting planets, 1 AI', '2 starting planets, 2 AI', '1 starting planet, 3 AI'];
+        const btnW = 220, btnH = 50, gap = 16;
+        const startY = cy - 50;
+
         for (let i = 0; i < 3; i++) {
             const bx = cx - btnW / 2;
             const by = startY + i * (btnH + gap);
@@ -1033,31 +1227,159 @@ class XBattleGame {
             this.ctx.fillStyle = '#777';
             this.ctx.fillText(descs[i], cx, by + 41);
 
-            this._menuButtons.push({ x: bx, y: by, w: btnW, h: btnH, difficulty: i + 1 });
+            this._menuButtons.push({ x: bx, y: by, w: btnW, h: btnH, action: 'qp-difficulty', difficulty: i + 1 });
         }
 
         this.ctx.font = '15px Arial';
         this.ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        this.ctx.fillText('Click a difficulty or press 1 / 2 / 3', cx, startY + 3 * (btnH + gap) + 20);
+        this.ctx.fillText('Press 1 / 2 / 3', cx, startY + 3 * (btnH + gap) + 20);
+    }
 
-        this.ctx.restore();
+    /** Campaign difficulty select. */
+    renderCampaignDifficultyMenu() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+        this._backButton = this.renderBackButton();
+
+        this.ctx.font = '18px Arial';
+        this.ctx.fillStyle = '#aaa';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Campaign — Select Difficulty', cx, cy - 90);
+
+        const labels = ['1 — Easy', '2 — Medium', '3 — Hard'];
+        const descs = ['1 AI opponent, relaxed pace', '2 AI opponents, balanced', '3 AI opponents, aggressive'];
+        const btnW = 220, btnH = 50, gap = 16;
+        const startY = cy - 50;
+
+        for (let i = 0; i < 3; i++) {
+            const bx = cx - btnW / 2;
+            const by = startY + i * (btnH + gap);
+            const diff = ['easy', 'medium', 'hard'][i];
+            const selected = this.campaignDifficulty === diff;
+
+            this.ctx.fillStyle = selected ? 'rgba(0,255,255,0.15)' : 'rgba(255,255,255,0.05)';
+            this.ctx.strokeStyle = selected ? '#00ffff' : 'rgba(255,255,255,0.2)';
+            this.ctx.lineWidth = selected ? 2 : 1;
+            this.ctx.beginPath();
+            this.ctx.roundRect(bx, by, btnW, btnH, 8);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            this.ctx.font = 'bold 18px Arial';
+            this.ctx.fillStyle = selected ? '#00ffff' : '#ccc';
+            this.ctx.fillText(labels[i], cx, by + 23);
+            this.ctx.font = '12px Arial';
+            this.ctx.fillStyle = '#777';
+            this.ctx.fillText(descs[i], cx, by + 41);
+
+            this._menuButtons.push({ x: bx, y: by, w: btnW, h: btnH, action: 'campaign-difficulty', campaignDiff: diff });
+        }
+
+        this.ctx.font = '15px Arial';
+        this.ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        this.ctx.fillText('Press 1 / 2 / 3', cx, startY + 3 * (btnH + gap) + 20);
+    }
+
+    /** Level select grid: 2 rows × 5 columns. */
+    renderLevelSelectMenu() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+        this._backButton = this.renderBackButton();
+
+        const diffLabel = this.campaignDifficulty.charAt(0).toUpperCase() + this.campaignDifficulty.slice(1);
+        this.ctx.font = '18px Arial';
+        this.ctx.fillStyle = '#aaa';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(`Campaign — ${diffLabel}`, cx, cy - 110);
+
+        if (!this.levelLoader.index) return;
+
+        const cols = 5, rows = 2;
+        const btnW = 140, btnH = 70, gapX = 14, gapY = 14;
+        const gridW = cols * btnW + (cols - 1) * gapX;
+        const gridH = rows * btnH + (rows - 1) * gapY;
+        const gridX = cx - gridW / 2;
+        const gridY = cy - gridH / 2 - 20;
+
+        const levels = this.levelLoader.index.levels;
+        for (let i = 0; i < levels.length; i++) {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            const bx = gridX + col * (btnW + gapX);
+            const by = gridY + row * (btnH + gapY);
+            const level = levels[i];
+            const unlocked = this.levelLoader.isLevelUnlocked(level.id, this.campaignDifficulty);
+
+            this.ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)';
+            this.ctx.strokeStyle = unlocked ? 'rgba(0,255,255,0.3)' : 'rgba(255,255,255,0.08)';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.roundRect(bx, by, btnW, btnH, 8);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Level number
+            this.ctx.font = 'bold 16px Arial';
+            this.ctx.fillStyle = unlocked ? '#00ffff' : '#444';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`${level.id}`, bx + btnW / 2, by + 22);
+
+            // Level name
+            this.ctx.font = '11px Arial';
+            this.ctx.fillStyle = unlocked ? '#bbb' : '#444';
+            this.ctx.fillText(unlocked ? level.name : '\u{1F512}', bx + btnW / 2, by + 40);
+
+            // Archetype
+            this.ctx.font = '10px Arial';
+            this.ctx.fillStyle = '#555';
+            this.ctx.fillText(unlocked ? level.archetype : '', bx + btnW / 2, by + 56);
+
+            this._menuButtons.push({ x: bx, y: by, w: btnW, h: btnH, action: 'level-select', levelId: level.id, enabled: unlocked });
+        }
+
+        this.ctx.font = '13px Arial';
+        this.ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        this.ctx.fillText('Esc to go back', cx, gridY + gridH + 30);
     }
 
     /**
-     * Processes clicks on difficulty buttons in menu state.
+     * Processes clicks on menu buttons, dispatching based on menuScreen.
      * @param {MouseEvent} e - Click event with clientX/clientY
      */
     handleMenuClick(e) {
         const rect = this.canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        if (!this._menuButtons) return;
-        for (const btn of this._menuButtons) {
-            if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
-                this.difficulty = btn.difficulty;
-                this.startGame();
+
+        // Check back button
+        if (this._backButton) {
+            const b = this._backButton;
+            if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+                if (this.menuScreen === 'level-select') this.menuScreen = 'campaign-difficulty';
+                else this.menuScreen = 'main';
                 return;
             }
+        }
+
+        if (!this._menuButtons) return;
+        for (const btn of this._menuButtons) {
+            if (mx < btn.x || mx > btn.x + btn.w || my < btn.y || my > btn.y + btn.h) continue;
+
+            if (btn.action === 'campaign' && btn.enabled) {
+                this.menuScreen = 'campaign-difficulty';
+            } else if (btn.action === 'quickplay') {
+                this.menuScreen = 'quickplay-difficulty';
+            } else if (btn.action === 'qp-difficulty') {
+                this.gameMode = 'quickplay';
+                this.difficulty = btn.difficulty;
+                this.startGame();
+            } else if (btn.action === 'campaign-difficulty') {
+                this.campaignDifficulty = btn.campaignDiff;
+                this.menuScreen = 'level-select';
+            } else if (btn.action === 'level-select' && btn.enabled) {
+                this.startCampaignLevel(btn.levelId, this.campaignDifficulty);
+            }
+            return;
         }
     }
 
@@ -1164,12 +1486,82 @@ class XBattleGame {
             this.ctx.textAlign = 'left';
         });
 
-        this.ctx.font = '18px Arial';
-        this.ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('Click anywhere to play again', cx, by + boxH + 36);
+        this._endScreenButtons = [];
+        if (this.gameMode === 'campaign') {
+            // Campaign win/loss buttons
+            const eBtnW = 160, eBtnH = 40, eGap = 16;
+            const won = this.gameState === 'won';
+            const buttons = [];
+            if (won && this.levelLoader.hasNextLevel()) {
+                buttons.push({ label: 'Next Level', action: 'next' });
+            }
+            if (!won) {
+                buttons.push({ label: 'Retry', action: 'retry' });
+            }
+            buttons.push({ label: 'Level Select', action: 'levels' });
+            buttons.push({ label: 'Menu', action: 'menu' });
+
+            const totalW = buttons.length * eBtnW + (buttons.length - 1) * eGap;
+            const startX = cx - totalW / 2;
+            const ey = by + boxH + 24;
+
+            buttons.forEach((btn, i) => {
+                const ebx = startX + i * (eBtnW + eGap);
+                this.ctx.fillStyle = i === 0 ? 'rgba(0,255,255,0.12)' : 'rgba(255,255,255,0.05)';
+                this.ctx.strokeStyle = i === 0 ? 'rgba(0,255,255,0.5)' : 'rgba(255,255,255,0.2)';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.roundRect(ebx, ey, eBtnW, eBtnH, 6);
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                this.ctx.font = 'bold 14px Arial';
+                this.ctx.fillStyle = i === 0 ? '#00ffff' : '#ccc';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(btn.label, ebx + eBtnW / 2, ey + 25);
+
+                this._endScreenButtons.push({ x: ebx, y: ey, w: eBtnW, h: eBtnH, action: btn.action });
+            });
+
+            // Unlock next level on win
+            if (won && !this._levelUnlocked) {
+                this._levelUnlocked = true;
+                this.levelLoader.unlockNextLevel(this.levelLoader.currentDifficulty, this.levelLoader.currentLevelId);
+            }
+        } else {
+            this.ctx.font = '18px Arial';
+            this.ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('Click anywhere to play again', cx, by + boxH + 36);
+        }
 
         this.ctx.restore();
+    }
+
+    /** Handles clicks on campaign end-screen buttons (Next Level, Retry, Level Select, Menu). */
+    handleEndScreenClick(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        if (!this._endScreenButtons) return;
+        for (const btn of this._endScreenButtons) {
+            if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+                this._levelUnlocked = false;
+                if (btn.action === 'next') {
+                    this.startCampaignLevel(this.levelLoader.getNextLevelId(), this.levelLoader.currentDifficulty);
+                } else if (btn.action === 'retry') {
+                    this.startCampaignLevel(this.levelLoader.currentLevelId, this.levelLoader.currentDifficulty);
+                } else if (btn.action === 'levels') {
+                    this.gameState = 'menu';
+                    this.menuScreen = 'level-select';
+                } else if (btn.action === 'menu') {
+                    this.gameState = 'menu';
+                    this.menuScreen = 'main';
+                }
+                return;
+            }
+        }
     }
 
     /** @see hexToRgba — instance-level wrapper for the module-level utility. */
@@ -1692,9 +2084,12 @@ class XBattleGame {
         }
 
         const aiPlanets = this.planets
-            .filter(p => p.owner === playerId && p.forces > 10)
+            .filter(p => p.owner === playerId && p.forces > (this.aiForceThreshold || 10))
             .sort((a, b) => b.forces - a.forces);
-        const maxActive = Math.max(2, Math.ceil(aiPlanets.length * 0.4));
+        const baseActive = Math.max(2, Math.ceil(aiPlanets.length * 0.4));
+        const maxActive = this.aiTopPlanets
+            ? Math.min(baseActive, this.aiTopPlanets)
+            : baseActive;
         for (const source of aiPlanets.slice(0, maxActive)) {
             const target = this.selectBestTargetPlanet(source, playerId);
             if (target) {
@@ -1737,7 +2132,7 @@ class XBattleGame {
             } else if (planet.owner === null) {
                 // Expand into neutrals — medium priority
                 score = planet.productionRate * 3 - distance * 0.01;
-            } else if (sourcePlanet.forces >= planet.forces * 1.2) {
+            } else if (sourcePlanet.forces >= planet.forces * (this.aiAttackRatio || 1.2)) {
                 // Attack with modest advantage (was 1.5× — too conservative)
                 const adv = sourcePlanet.forces - planet.forces;
                 score = planet.productionRate * 4 - distance * 0.01 + adv * 0.1;

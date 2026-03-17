@@ -1,0 +1,209 @@
+{
+  "id": 10,
+  "name": "Pressure Point",
+  "difficulty": "hard",
+  "archetype": "flanked",
+  "players": [
+    {
+      "id": 0,
+      "color": "#00ffff",
+      "name": "You"
+    },
+    {
+      "id": 1,
+      "color": "#ff00ff",
+      "name": "Rival"
+    },
+    {
+      "id": 2,
+      "color": "#00ff00",
+      "name": "Player 3"
+    },
+    {
+      "id": 3,
+      "color": "#ffaa00",
+      "name": "Player 4"
+    }
+  ],
+  "ai": {
+    "count": 3,
+    "moveInterval": 2200,
+    "attackRatio": 1.3,
+    "forceThreshold": 8,
+    "topPlanetsPerTick": 3
+  },
+  "planets": [
+    {
+      "id": 0,
+      "x": 0.15,
+      "y": 0.85,
+      "radius": 24,
+      "owner": 0,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 1,
+      "x": 0.85,
+      "y": 0.15,
+      "radius": 24,
+      "owner": 1,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 2,
+      "x": 0.85,
+      "y": 0.85,
+      "radius": 24,
+      "owner": 2,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 3,
+      "x": 0.15,
+      "y": 0.15,
+      "radius": 24,
+      "owner": 3,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 4,
+      "x": 0.24,
+      "y": 0.76,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 5,
+      "x": 0.76,
+      "y": 0.24,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 6,
+      "x": 0.76,
+      "y": 0.76,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 7,
+      "x": 0.24,
+      "y": 0.24,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 8,
+      "x": 0.35,
+      "y": 0.67,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 9,
+      "x": 0.65,
+      "y": 0.33,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 10,
+      "x": 0.65,
+      "y": 0.67,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 11,
+      "x": 0.35,
+      "y": 0.33,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 12,
+      "x": 0.42,
+      "y": 0.58,
+      "radius": 18,
+      "owner": null,
+      "forces": 10,
+      "productionRate": 2
+    },
+    {
+      "id": 13,
+      "x": 0.58,
+      "y": 0.42,
+      "radius": 18,
+      "owner": null,
+      "forces": 10,
+      "productionRate": 2
+    },
+    {
+      "id": 14,
+      "x": 0.58,
+      "y": 0.58,
+      "radius": 15,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 15,
+      "x": 0.42,
+      "y": 0.42,
+      "radius": 15,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 16,
+      "x": 0.5,
+      "y": 0.5,
+      "radius": 22,
+      "owner": null,
+      "forces": 14,
+      "productionRate": 2
+    },
+    {
+      "id": 17,
+      "x": 0.12,
+      "y": 0.74,
+      "radius": 14,
+      "owner": null,
+      "forces": 4,
+      "productionRate": 1
+    },
+    {
+      "id": 18,
+      "x": 0.88,
+      "y": 0.26,
+      "radius": 14,
+      "owner": null,
+      "forces": 4,
+      "productionRate": 1
+    }
+  ],
+  "maxForceRange": 320
+}

@@ -1,0 +1,100 @@
+{
+  "id": 1,
+  "name": "First Contact",
+  "difficulty": "easy",
+  "archetype": "symmetric",
+  "players": [
+    {
+      "id": 0,
+      "color": "#00ffff",
+      "name": "You"
+    },
+    {
+      "id": 1,
+      "color": "#ff00ff",
+      "name": "Rival"
+    }
+  ],
+  "ai": {
+    "count": 1,
+    "moveInterval": 5000,
+    "attackRatio": 2,
+    "forceThreshold": 15,
+    "topPlanetsPerTick": 1
+  },
+  "planets": [
+    {
+      "id": 0,
+      "x": 0.15,
+      "y": 0.85,
+      "radius": 24,
+      "owner": 0,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 1,
+      "x": 0.85,
+      "y": 0.15,
+      "radius": 24,
+      "owner": 1,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 2,
+      "x": 0.85,
+      "y": 0.85,
+      "radius": 24,
+      "owner": null,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 3,
+      "x": 0.15,
+      "y": 0.15,
+      "radius": 24,
+      "owner": null,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 4,
+      "x": 0.24,
+      "y": 0.76,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 5,
+      "x": 0.76,
+      "y": 0.24,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 6,
+      "x": 0.76,
+      "y": 0.76,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 7,
+      "x": 0.24,
+      "y": 0.24,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    }
+  ],
+  "maxForceRange": 320
+}

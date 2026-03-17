@@ -1,0 +1,159 @@
+{
+  "id": 5,
+  "name": "The Gap",
+  "difficulty": "medium",
+  "archetype": "expansion",
+  "players": [
+    {
+      "id": 0,
+      "color": "#00ffff",
+      "name": "You"
+    },
+    {
+      "id": 1,
+      "color": "#ff00ff",
+      "name": "Rival"
+    },
+    {
+      "id": 2,
+      "color": "#00ff00",
+      "name": "Player 3"
+    }
+  ],
+  "ai": {
+    "count": 2,
+    "moveInterval": 3700,
+    "attackRatio": 1.7,
+    "forceThreshold": 12,
+    "topPlanetsPerTick": 1
+  },
+  "planets": [
+    {
+      "id": 0,
+      "x": 0.15,
+      "y": 0.85,
+      "radius": 24,
+      "owner": 0,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 1,
+      "x": 0.85,
+      "y": 0.15,
+      "radius": 24,
+      "owner": 1,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 2,
+      "x": 0.85,
+      "y": 0.85,
+      "radius": 24,
+      "owner": 2,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 3,
+      "x": 0.15,
+      "y": 0.15,
+      "radius": 24,
+      "owner": null,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 4,
+      "x": 0.24,
+      "y": 0.76,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 5,
+      "x": 0.76,
+      "y": 0.24,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 6,
+      "x": 0.76,
+      "y": 0.76,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 7,
+      "x": 0.24,
+      "y": 0.24,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 8,
+      "x": 0.35,
+      "y": 0.67,
+      "radius": 18,
+      "owner": null,
+      "forces": 8,
+      "productionRate": 2
+    },
+    {
+      "id": 9,
+      "x": 0.65,
+      "y": 0.33,
+      "radius": 18,
+      "owner": null,
+      "forces": 8,
+      "productionRate": 2
+    },
+    {
+      "id": 10,
+      "x": 0.65,
+      "y": 0.67,
+      "radius": 15,
+      "owner": null,
+      "forces": 5,
+      "productionRate": 1
+    },
+    {
+      "id": 11,
+      "x": 0.35,
+      "y": 0.33,
+      "radius": 15,
+      "owner": null,
+      "forces": 5,
+      "productionRate": 1
+    },
+    {
+      "id": 12,
+      "x": 0.46,
+      "y": 0.58,
+      "radius": 20,
+      "owner": null,
+      "forces": 12,
+      "productionRate": 2
+    },
+    {
+      "id": 13,
+      "x": 0.54,
+      "y": 0.42,
+      "radius": 20,
+      "owner": null,
+      "forces": 12,
+      "productionRate": 2
+    }
+  ],
+  "maxForceRange": 320
+}

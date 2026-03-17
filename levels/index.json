@@ -1,0 +1,16 @@
+{
+  "totalLevels": 10,
+  "difficulties": ["easy", "medium", "hard"],
+  "levels": [
+    { "id": 1, "name": "First Contact", "archetype": "symmetric", "easy": "easy/001.json", "medium": "medium/001.json", "hard": "hard/001.json" },
+    { "id": 2, "name": "Quiet Sector", "archetype": "expansion", "easy": "easy/002.json", "medium": "medium/002.json", "hard": "hard/002.json" },
+    { "id": 3, "name": "Frontier Post", "archetype": "sparse", "easy": "easy/003.json", "medium": "medium/003.json", "hard": "hard/003.json" },
+    { "id": 4, "name": "Scattered Rocks", "archetype": "corridor", "easy": "easy/004.json", "medium": "medium/004.json", "hard": "hard/004.json" },
+    { "id": 5, "name": "The Gap", "archetype": "expansion", "easy": "easy/005.json", "medium": "medium/005.json", "hard": "hard/005.json" },
+    { "id": 6, "name": "Twin Moons", "archetype": "symmetric", "easy": "easy/006.json", "medium": "medium/006.json", "hard": "hard/006.json" },
+    { "id": 7, "name": "Outpost Run", "archetype": "cluster", "easy": "easy/007.json", "medium": "medium/007.json", "hard": "hard/007.json" },
+    { "id": 8, "name": "The Crossing", "archetype": "chokepoint", "easy": "easy/008.json", "medium": "medium/008.json", "hard": "hard/008.json" },
+    { "id": 9, "name": "Iron Gate", "archetype": "chokepoint", "easy": "easy/009.json", "medium": "medium/009.json", "hard": "hard/009.json" },
+    { "id": 10, "name": "Pressure Point", "archetype": "flanked", "easy": "easy/010.json", "medium": "medium/010.json", "hard": "hard/010.json" }
+  ]
+}

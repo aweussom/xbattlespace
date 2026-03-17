@@ -1,0 +1,181 @@
+{
+  "id": 9,
+  "name": "Iron Gate",
+  "difficulty": "easy",
+  "archetype": "chokepoint",
+  "players": [
+    {
+      "id": 0,
+      "color": "#00ffff",
+      "name": "You"
+    },
+    {
+      "id": 1,
+      "color": "#ff00ff",
+      "name": "Rival"
+    }
+  ],
+  "ai": {
+    "count": 1,
+    "moveInterval": 4600,
+    "attackRatio": 1.9,
+    "forceThreshold": 15,
+    "topPlanetsPerTick": 1
+  },
+  "planets": [
+    {
+      "id": 0,
+      "x": 0.15,
+      "y": 0.85,
+      "radius": 24,
+      "owner": 0,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 1,
+      "x": 0.85,
+      "y": 0.15,
+      "radius": 24,
+      "owner": 1,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 2,
+      "x": 0.85,
+      "y": 0.85,
+      "radius": 24,
+      "owner": null,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 3,
+      "x": 0.15,
+      "y": 0.15,
+      "radius": 24,
+      "owner": null,
+      "forces": 30,
+      "productionRate": 2
+    },
+    {
+      "id": 4,
+      "x": 0.24,
+      "y": 0.76,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 5,
+      "x": 0.76,
+      "y": 0.24,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 6,
+      "x": 0.76,
+      "y": 0.76,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 7,
+      "x": 0.24,
+      "y": 0.24,
+      "radius": 16,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 8,
+      "x": 0.5,
+      "y": 0.5,
+      "radius": 30,
+      "owner": null,
+      "forces": 28,
+      "productionRate": 3
+    },
+    {
+      "id": 9,
+      "x": 0.38,
+      "y": 0.5,
+      "radius": 16,
+      "owner": null,
+      "forces": 8,
+      "productionRate": 1
+    },
+    {
+      "id": 10,
+      "x": 0.62,
+      "y": 0.5,
+      "radius": 16,
+      "owner": null,
+      "forces": 8,
+      "productionRate": 1
+    },
+    {
+      "id": 11,
+      "x": 0.26,
+      "y": 0.5,
+      "radius": 18,
+      "owner": null,
+      "forces": 10,
+      "productionRate": 2
+    },
+    {
+      "id": 12,
+      "x": 0.24,
+      "y": 0.63,
+      "radius": 15,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 13,
+      "x": 0.24,
+      "y": 0.37,
+      "radius": 15,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 14,
+      "x": 0.74,
+      "y": 0.5,
+      "radius": 18,
+      "owner": null,
+      "forces": 10,
+      "productionRate": 2
+    },
+    {
+      "id": 15,
+      "x": 0.76,
+      "y": 0.63,
+      "radius": 15,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    },
+    {
+      "id": 16,
+      "x": 0.76,
+      "y": 0.37,
+      "radius": 15,
+      "owner": null,
+      "forces": 6,
+      "productionRate": 1
+    }
+  ],
+  "maxForceRange": 320
+}
