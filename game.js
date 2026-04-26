@@ -947,7 +947,7 @@ class XBattleGame {
             this.ctx.textAlign = 'center';
             this.ctx.fillStyle = 'rgba(0,255,255,0.7)';
             this.ctx.fillText(
-                `${this.selectedPlanets.length} planet${this.selectedPlanets.length > 1 ? 's' : ''} selected — click target`,
+                `${this.selectedPlanets.length} planet${this.selectedPlanets.length > 1 ? 's' : ''} selected — click target · Esc to deselect`,
                 this.canvas.width / 2, 30
             );
             this.ctx.restore();
@@ -1186,14 +1186,17 @@ class XBattleGame {
 
         // If we have a box selection waiting for target, a click assigns the target
         if (this.selectedPlanets.length > 0 && this.boxMode === 'send') {
-            const target = this.getSnapTarget(this.mousePos.x, this.mousePos.y, null);
-            if (target && target.owner !== 0) {
+            const target = this.getPlanetAt(this.mousePos.x, this.mousePos.y);
+            if (target) {
+                // Clicked on a planet — send forces there
+                this.selectedPlanets = this.selectedPlanets.filter(p => p.owner === 0);
+                if (this.selectedPlanets.length === 0) { this.clearBoxSelect(); return; }
                 this.sendSelectedToTarget(target);
-            } else if (target && target.owner === 0) {
-                // Reinforce own planet
-                this.sendSelectedToTarget(target);
+                // Keep selection sticky — next click redirects to a new target
+            } else {
+                // Clicked empty space — deselect
+                this.clearBoxSelect();
             }
-            this.clearBoxSelect();
             return;
         }
 
@@ -1623,7 +1626,6 @@ class XBattleGame {
             this.winner = null;
             this.finalScores = planetCount;
             this.logEvent('game_end', { result: 'lost', scores: [...planetCount] });
-            this.downloadLog();
             return;
         }
 
@@ -1632,7 +1634,6 @@ class XBattleGame {
             this.winner = 0;
             this.finalScores = planetCount;
             this.logEvent('game_end', { result: 'won', scores: [...planetCount] });
-            this.downloadLog();
             return;
         }
 
@@ -1642,7 +1643,6 @@ class XBattleGame {
             this.winner = aliveIds[0];
             this.finalScores = planetCount;
             this.logEvent('game_end', { result: 'lost', winner: aliveIds[0], scores: [...planetCount] });
-            this.downloadLog();
         }
     }
 
