@@ -1,0 +1,2 @@
+# Default to LF line endings; auto-detect text files
+* text=auto eol=lf
